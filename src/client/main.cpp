@@ -45,11 +45,16 @@ int main() {
 
     // Connect client socket to server (by creating tcp handshake between socket and server)
     if(connect(sock_fd, (sockaddr*)&server_address, sizeof(server_address)) < 0){
-        std::cerr << "Failed to connect socket to server \n";
         std::cerr << "Connection failed: " << strerror(errno) << "\n";
         close(sock_fd);
         return 1;
     }
+
+    std::cout << "Enter your username: ";
+    std::string username;
+    std::getline(std::cin, username);
+    username += "\n";
+    write(sock_fd, username.c_str(), username.size());
 
     std::cout << "Connected to server. Type messages (Ctrl+D to quit):\n";
 

@@ -9,16 +9,17 @@
 #include <mutex>
 #include <algorithm>
 
-// Shared list of connected client sockets
+
 std::vector<int> client_fds;
+std::unordered_map<int, std::string> client_names;
 std::mutex clients_mutex; 
 
-void broadcast_message(const char* buffer, ssize_t len, int sender_fd){
+void broadcast_message(const std::string& msg, int sender_fd){
     std::lock_guard<std::mutex> lock(clients_mutex);
     for (int fd: client_fds){
         //broadcast all messages except client sending
         if (fd != sender_fd){
-            write(fd, buffer, len);
+            write(fd, msg.c_str(), msg.size());
         }
     }
 }
@@ -31,6 +32,7 @@ void remove_client(int client_fd){
         std::remove(client_fds.begin(), client_fds.end(), client_fd), 
         client_fds.end()
     );
+    client_names.erase(client_fd);
 
     // condensed erase remove only for c++ 20+  :(
     //std::erase(client_fds, client_fd);
@@ -38,19 +40,41 @@ void remove_client(int client_fd){
 
 
 void handle_client(int client_fd){
-    // connect client fd to client fds vector
+
+    // create username from 1st message
+
+    char buffer[1024];
+    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+
+    if(bytes_read <= 0){
+        close(client_fd);
+        return;
+    }
+
+    buffer[bytes_read] = '\0';
+    std::string username = buffer;
+
+    // strip new line
+    if (!username.empty() && username.back() == '\n'){
+        username.pop_back();
+        client_names[client_fd] = username;
+    }
+
+
+    // add client fd to client fds vector
     {
         std::lock_guard<std::mutex> lock(clients_mutex); // client_fds unlocked after client is added
         client_fds.push_back(client_fd); // adds new client to back of vector
     }
 
-    std::cout << "Client " << client_fd << " is connected. Total clients: " << client_fds.size() << "\n";
+    std::cout << username << " connected (fd" << client_fd << ") . Total clients: " << client_fds.size() << "\n";
 
+    std::string join_msg = username + " has joined the chat\n";
+    broadcast_message(join_msg, client_fd);
 
     //read and write data
-    char buffer[1024];
     while (true){
-        ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+        bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
 
         if(bytes_read < 0){
             std::cerr << "Client " << client_fd << " disconnected\n";
@@ -58,14 +82,16 @@ void handle_client(int client_fd){
         }
 
         buffer[bytes_read] = '\0'; //null terminator
+        std::cout << username << ": " << buffer;
+
+        std::string tagged = username + ": " + buffer;
+        broadcast_message(tagged, client_fd);
         
-        std::cout << "Received from " << client_fd << ": " << buffer;
-        // Tag the message with sender identity before broadcasting
-        std::string tagged = "Client " + std::to_string(client_fd) + ": " + buffer;
-        broadcast_message(buffer, bytes_read, client_fd);
     }
 
+    std:: string leftChat = username + " has left the chat\n";
     remove_client(client_fd);
+    broadcast_message(leftChat, -1);
     close(client_fd);
 }
 
@@ -79,15 +105,11 @@ int main() {
     }
 
     // Allow quick restart of ther server without "address already in use errors"
-    // function int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
-    // used to confgiure network timeouts, buffersizes and routing
- 
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
 
     // Specify Server Address to connect to 
-    // Create struct to o store sin_family, sin_addr, and port
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY; // listen on all local interfaces/accepts connections on any ip
@@ -102,7 +124,7 @@ int main() {
 
 
     // Listen for incoming connections from clients
-    if (listen(server_fd,1) < 0){
+    if (listen(server_fd, 10) < 0){
         std::cerr <<"Listen failed\n";
         close(server_fd);
         return 1;
