@@ -8,18 +8,19 @@
 #include <thread>
 #include <mutex>
 #include <algorithm>
-
+#include <unordered_map>
+#include "../common/protocol.hpp"
 
 std::vector<int> client_fds;
 std::unordered_map<int, std::string> client_names;
 std::mutex clients_mutex; 
 
-void broadcast_message(const std::string& msg, int sender_fd){
+void broadcast(MessageType type, const std::string& payload, int sender_fd){
     std::lock_guard<std::mutex> lock(clients_mutex);
     for (int fd: client_fds){
         //broadcast all messages except client sending
         if (fd != sender_fd){
-            write(fd, msg.c_str(), msg.size());
+            send_message(fd, type, payload);
         }
     }
 }
@@ -40,58 +41,42 @@ void remove_client(int client_fd){
 
 
 void handle_client(int client_fd){
+    MessageType type;
+    std::string payload;
 
     // create username from 1st message
 
-    char buffer[1024];
-    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
-
-    if(bytes_read <= 0){
+    if(!receive_message(client_fd, type, payload) || type!= MessageType::USERNAME){
         close(client_fd);
         return;
     }
 
-    buffer[bytes_read] = '\0';
-    std::string username = buffer;
-
-    // strip new line
-    if (!username.empty() && username.back() == '\n'){
-        username.pop_back();
-        client_names[client_fd] = username;
-    }
-
+    std::string username = payload;
 
     // add client fd to client fds vector
     {
         std::lock_guard<std::mutex> lock(clients_mutex); // client_fds unlocked after client is added
         client_fds.push_back(client_fd); // adds new client to back of vector
+        client_names[client_fd] = username;
     }
 
     std::cout << username << " connected (fd" << client_fd << ") . Total clients: " << client_fds.size() << "\n";
-
-    std::string join_msg = username + " has joined the chat\n";
-    broadcast_message(join_msg, client_fd);
+    broadcast(MessageType::JOIN, username, client_fd);
+    
 
     //read and write data
-    while (true){
-        bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+    while (receive_message(client_fd, type, payload)){
+        if (type == MessageType::CHAT){
+            std::cout << username << ": " << payload << "\n";
+            std::string tagged = username + ": " + payload;
+            broadcast(MessageType::CHAT, tagged, client_fd);
 
-        if(bytes_read < 0){
-            std::cerr << "Client " << client_fd << " disconnected\n";
-            break;
         }
-
-        buffer[bytes_read] = '\0'; //null terminator
-        std::cout << username << ": " << buffer;
-
-        std::string tagged = username + ": " + buffer;
-        broadcast_message(tagged, client_fd);
         
     }
-
-    std:: string leftChat = username + " has left the chat\n";
+    std::cout << username + " has left the chat\n";
     remove_client(client_fd);
-    broadcast_message(leftChat, -1);
+    broadcast(MessageType::LEAVE, username, -1);
     close(client_fd);
 }
 

@@ -5,24 +5,31 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <thread>
+#include "../common/protocol.hpp"
 
 void receive_loop(int sock_fd){
-    char buffer[1024];
-    while (true){
-        ssize_t bytes_read = read(sock_fd, buffer, sizeof(buffer) - 1);
-        if (bytes_read <= 0){
-            std::cout << "\nServer Disconnected\n";
-            break;
+    MessageType type;
+    std::string payload;
+
+    while(receive_message(sock_fd, type, payload)) {
+        switch(type){
+            case MessageType::CHAT:
+                std::cout << payload << "\n";
+                break;
+            case MessageType::JOIN:
+                std::cout << payload << " has joined\n";
+                break;
+            case MessageType::LEAVE:
+                std::cout << payload << "has left\n";
+                break;
+            default:
+                break;
         }
-
-        buffer[bytes_read] = '\0';
-        std::cout << buffer;
     }
+    std::cout <<"\nServer disconnected\n";
 }
-
 int main() {
     //std::cout <<"Client Skeleton alive\n";
-
 
     // Create a socket
 
@@ -38,7 +45,7 @@ int main() {
 
     // init sockaddr_in struct
     sockaddr_in server_address{};
-    server_address.sin_family = AF_INET; // defiens ipv4
+    server_address.sin_family = AF_INET; // defines ipv4
     server_address.sin_port = htons(8080); // sets port to 5000
     inet_pton(AF_INET, "127.0.0.1", &server_address.sin_addr); // set ip address to local host
 
@@ -53,9 +60,8 @@ int main() {
     std::cout << "Enter your username: ";
     std::string username;
     std::getline(std::cin, username);
-    username += "\n";
-    write(sock_fd, username.c_str(), username.size());
-
+    send_message(sock_fd, MessageType::USERNAME, username);
+    
     std::cout << "Connected to server. Type messages (Ctrl+D to quit):\n";
 
 
@@ -70,7 +76,7 @@ int main() {
 
     while(std::getline(std::cin,line)){
         line += "\n";
-        write(sock_fd, line.c_str(), line.size());
+        send_message(sock_fd, MessageType::CHAT, line);
 
     }
 
