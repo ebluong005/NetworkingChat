@@ -1355,3 +1355,43 @@ events:
       LTO support using: LLVM version 17.0.0 (static support for 29, runtime is 29)
       TAPI support using: Apple TAPI version 17.0.0 (tapi-1700.3.8)
 ...
+
+---
+events:
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/opt/homebrew/share/cmake/Modules/Internal/CheckSourceCompiles.cmake:104 (try_compile)"
+      - "/opt/homebrew/share/cmake/Modules/CheckCXXSourceCompiles.cmake:103 (cmake_check_source_compiles)"
+      - "/opt/homebrew/share/cmake/Modules/FindThreads.cmake:162 (check_cxx_source_compiles)"
+      - "/opt/homebrew/share/cmake/Modules/FindThreads.cmake:226 (_threads_check_libc)"
+      - "CMakeLists.txt:10 (find_package)"
+    checks:
+      - "Performing Test CMAKE_HAVE_LIBC_PTHREAD"
+    directories:
+      source: "/Users/ethanluong/chat-app/build/CMakeFiles/CMakeScratch/TryCompile-T18mwp"
+      binary: "/Users/ethanluong/chat-app/build/CMakeFiles/CMakeScratch/TryCompile-T18mwp"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_CXX_STDLIB_MODULES_JSON: ""
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_OSX_ARCHITECTURES: ""
+      CMAKE_OSX_DEPLOYMENT_TARGET: ""
+      CMAKE_OSX_SYSROOT: ""
+    buildResult:
+      variable: "CMAKE_HAVE_LIBC_PTHREAD"
+      cached: true
+      stdout: |
+        Change Dir: '/Users/ethanluong/chat-app/build/CMakeFiles/CMakeScratch/TryCompile-T18mwp'
+        
+        Run Build Command(s): /opt/homebrew/bin/cmake -E env VERBOSE=1 /usr/bin/make -f Makefile cmTC_07d89/fast
+        /Library/Developer/CommandLineTools/usr/bin/make  -f CMakeFiles/cmTC_07d89.dir/build.make CMakeFiles/cmTC_07d89.dir/build
+        Building CXX object CMakeFiles/cmTC_07d89.dir/src.cxx.o
+        /usr/bin/c++ -DCMAKE_HAVE_LIBC_PTHREAD  -std=gnu++17 -arch arm64 -MD -MT CMakeFiles/cmTC_07d89.dir/src.cxx.o -MF CMakeFiles/cmTC_07d89.dir/src.cxx.o.d -o CMakeFiles/cmTC_07d89.dir/src.cxx.o -c /Users/ethanluong/chat-app/build/CMakeFiles/CMakeScratch/TryCompile-T18mwp/src.cxx
+        Linking CXX executable cmTC_07d89
+        /opt/homebrew/bin/cmake -E cmake_link_script CMakeFiles/cmTC_07d89.dir/link.txt --verbose=1
+        /usr/bin/c++  -arch arm64 CMakeFiles/cmTC_07d89.dir/src.cxx.o -o cmTC_07d89
+        
+      exitCode: 0
+...

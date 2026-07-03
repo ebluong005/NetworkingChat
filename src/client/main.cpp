@@ -1,10 +1,24 @@
 #include <iostream>
 #include <cstring>
+#include <cerrno>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <cerrno>
+#include <thread>
+
+void receive_loop(int sock_fd){
+    char buffer[1024];
+    while (true){
+        ssize_t bytes_read = read(sock_fd, buffer, sizeof(buffer) - 1);
+        if (bytes_read <= 0){
+            std::cout << "\nServer Disconnected\n";
+            break;
+        }
+
+        buffer[bytes_read] = '\0';
+        std::cout << buffer;
+    }
+}
 
 int main() {
     //std::cout <<"Client Skeleton alive\n";
@@ -38,19 +52,21 @@ int main() {
     }
 
     std::cout << "Connected to server. Type messages (Ctrl+D to quit):\n";
+
+
     // Send / receive loop
-    std::string line; //delcares an emtpty string named line for read
+
+    // Start 2 threads: receive message thread, sending thread
+    std::thread(receive_loop, sock_fd).detach();
+
+    
+    std::string line; 
     char buffer[1024];
 
     while(std::getline(std::cin,line)){
         line += "\n";
         write(sock_fd, line.c_str(), line.size());
 
-        ssize_t bytes_read = read(sock_fd, buffer, sizeof(buffer) - 1);
-        if(bytes_read <= 0){
-            std::cout << "Server disconnected\n";
-            break;
-        }
     }
 
     close(sock_fd);

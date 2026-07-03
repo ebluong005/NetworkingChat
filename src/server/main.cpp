@@ -1,16 +1,77 @@
 #include <iostream>
 #include <cstring>
+#include <cerrno>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <cerrno>
+#include <vector>
+#include <thread>
+#include <mutex>
+#include <algorithm>
+
+// Shared list of connected client sockets
+std::vector<int> client_fds;
+std::mutex clients_mutex; 
+
+void broadcast_message(const char* buffer, ssize_t len, int sender_fd){
+    std::lock_guard<std::mutex> lock(clients_mutex);
+    for (int fd: client_fds){
+        //broadcast all messages except client sending
+        if (fd != sender_fd){
+            write(fd, buffer, len);
+        }
+    }
+}
+
+void remove_client(int client_fd){
+    std::lock_guard<std::mutex> lock(clients_mutex);
+    // erase remove block
+
+    client_fds.erase(
+        std::remove(client_fds.begin(), client_fds.end(), client_fd), 
+        client_fds.end()
+    );
+
+    // condensed erase remove only for c++ 20+  :(
+    //std::erase(client_fds, client_fd);
+}
+
+
+void handle_client(int client_fd){
+    // connect client fd to client fds vector
+    {
+        std::lock_guard<std::mutex> lock(clients_mutex); // client_fds unlocked after client is added
+        client_fds.push_back(client_fd); // adds new client to back of vector
+    }
+
+    std::cout << "Client " << client_fd << " is connected. Total clients: " << client_fds.size() << "\n";
+
+
+    //read and write data
+    char buffer[1024];
+    while (true){
+        ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+
+        if(bytes_read < 0){
+            std::cerr << "Client " << client_fd << " disconnected\n";
+            break;
+        }
+
+        buffer[bytes_read] = '\0'; //null terminator
+        
+        std::cout << "Received from " << client_fd << ": " << buffer;
+        // Tag the message with sender identity before broadcasting
+        std::string tagged = "Client " + std::to_string(client_fd) + ": " + buffer;
+        broadcast_message(buffer, bytes_read, client_fd);
+    }
+
+    remove_client(client_fd);
+    close(client_fd);
+}
 
 int main() {
     // Create a socket fer server
-    // function socket(int domain, int type, int protocol) creates an endpoint server side
-    // Parameters of socket () : AF_INET ; Address Family: Internet - use IPV4 addressing
-    // Parameters of socket () : SOCK_STREAM ; gives me a stream-oriented approach, connection based socket (this is what makes it tcp **note## SOCK_DGRAM gives UDP)
-    // Parameters of socket () : 0 ; picks the dfault for this combination which would AF_INET + SOCK_STREAM 
+    // function socket(int domain, int type, int protocol) creates an endpoint server side  
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0){
         std::cerr <<"Failed to create socket\n";
@@ -20,11 +81,7 @@ int main() {
     // Allow quick restart of ther server without "address already in use errors"
     // function int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
     // used to confgiure network timeouts, buffersizes and routing
-    // Parameter of setsockopt(): sockfd; The file descriptor of the socket you want to configure.
-    // Parameter setsockopt(): level; The protocol layer where the option resides (e.g., `SOL_SOCKET` for general socket options, `IPPROTO_TCP` for TCP-specific options).
-    // Parameter setsockopt(): optname; The specific setting you want to change (e.g., `SO_REUSEADDR`).
-    // Parameter setsockopt(): optval; A pointer to the value you want to assign to the option.
-    // Parameter setsockopt(): optlen; The size of the memory space pointed to by `optval`.
+ 
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -33,8 +90,6 @@ int main() {
     // Create struct to o store sin_family, sin_addr, and port
     sockaddr_in address{};
     address.sin_family = AF_INET;
-
-    // binds all network interfaces to this machine
     address.sin_addr.s_addr = INADDR_ANY; // listen on all local interfaces/accepts connections on any ip
     address.sin_port = htons(8080); //converts port to network byteorder
 
@@ -55,36 +110,23 @@ int main() {
 
     std::cout<<"Server is listening on port 8080...\n";
 
-    // Accept one client connection
-    sockaddr_in client_address{};
-    socklen_t client_len = sizeof(client_address);
-    int client_fd = accept(server_fd, (sockaddr*)&client_address , &client_len);
-    if(client_fd < 0){
-        std::cerr <<"Accept failed\n";
-        close(server_fd);
-        return 1;
-    }
-
-    std::cout<<"Client connected\n";
+ 
 
     // read from client and print/send
 
-    char buffer[1024];
-
     while(true){
-        ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) -1);
-        if(bytes_read <= 0){
-            std::cout << "Client disconnected\n";
-            break;
+        sockaddr_in client_address{};
+        socklen_t client_len = sizeof(client_address);
+        int client_fd = accept(server_fd, (sockaddr*)&client_address, &client_len);
+        if (client_fd < 0){
+            std::cerr << "Accept failed\n";
+            continue;
         }
-        buffer[bytes_read] = '\0';
-        std::cout << "Received: " << buffer;
 
-        //print out what client said
-        write(client_fd, buffer, bytes_read);
+        std::thread(handle_client, client_fd).detach();
     }
 
-    close(client_fd);
+    
     close(server_fd);
     return 0;
 
