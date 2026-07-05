@@ -10,6 +10,12 @@ enum class MessageType : uint32_t {
     CHAT = 1,
     JOIN = 2,
     LEAVE = 3,
+    PLAY_REQUEST = 4,   
+    GAME_START   = 5,   
+    GAME_MOVE    = 6,   
+    GAME_UPDATE  = 7,   
+    GAME_OVER    = 8,   
+    GAME_ERROR   = 9,   
 };
 
 

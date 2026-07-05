@@ -5,7 +5,26 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <thread>
+#include <atomic>
+#include <cctype>
 #include "../common/protocol.hpp"
+
+std::atomic<bool> in_game{false};
+
+void print_board(const std::string& board) {
+    std::cout << "\n";
+    for (int row = 0; row < 6; ++row) {
+        for (int col = 0; col < 7; ++col) {
+            std::cout << board[row * 7 + col] << " ";
+        }
+        std::cout << "\n";
+    }
+    std::cout << "0 1 2 3 4 5 6\n\n";
+}
+
+bool is_valid_column(const std::string& s) {
+    return s.size() == 1 && std::isdigit(static_cast<unsigned char>(s[0]));
+}
 
 void receive_loop(int sock_fd){
     MessageType type;
@@ -21,6 +40,20 @@ void receive_loop(int sock_fd){
                 break;
             case MessageType::LEAVE:
                 std::cout << payload << "has left\n";
+                break;
+            case MessageType::GAME_START:
+                in_game = true;
+                std::cout << "\n*** " << payload << " ***\n";
+                break;
+            case MessageType::GAME_UPDATE:
+                print_board(payload);
+                break;
+            case MessageType::GAME_OVER:
+                in_game = false;
+                std::cout << "*** " << payload << " ***\n";
+                break;
+            case MessageType::GAME_ERROR:
+                std::cout << "[Game] " << payload << "\n";
                 break;
             default:
                 break;
@@ -61,8 +94,9 @@ int main() {
     std::string username;
     std::getline(std::cin, username);
     send_message(sock_fd, MessageType::USERNAME, username);
-    
-    std::cout << "Connected to server. Type messages (Ctrl+D to quit):\n";
+
+
+    std::cout << "Connected. Type /play to start a game, or chat normally:\n";
 
 
     // Send / receive loop
@@ -72,12 +106,15 @@ int main() {
 
     
     std::string line; 
-    char buffer[1024];
-
-    while(std::getline(std::cin,line)){
-        line += "\n";
-        send_message(sock_fd, MessageType::CHAT, line);
-
+    
+    while (std::getline(std::cin, line)) {
+        if (line == "/play") {
+            send_message(sock_fd, MessageType::PLAY_REQUEST, "");
+        } else if (in_game && is_valid_column(line)) {
+            send_message(sock_fd, MessageType::GAME_MOVE, line);
+        } else {
+            send_message(sock_fd, MessageType::CHAT, line);
+        }
     }
 
     close(sock_fd);
