@@ -17,7 +17,6 @@
 std::vector<int> client_fds;
 std::unordered_map<int, std::string> client_names;
 std::mutex clients_mutex; 
-
 std::mutex write_mutex;
 
 struct Game {
@@ -29,7 +28,6 @@ struct Game {
 
 std::vector<int> waiting_queue;
 std::mutex queue_mutex;
-
 std::unordered_map<int, std::shared_ptr<Game>> fd_to_game;
 std::mutex games_mutex;
 
@@ -200,6 +198,32 @@ void handle_client(int client_fd){
     }
 
     std::cout << username + " has left the chat\n";
+    // remove from matchmaking queue if they were waiting for an opponent
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex);
+        waiting_queue.erase(
+            std::remove(waiting_queue.begin(), waiting_queue.end(), client_fd),
+            waiting_queue.end()
+        );
+    }
+    // New: handle disconnect if this client was in an active game
+    {
+        std::shared_ptr<Game> game;
+        {
+            std::lock_guard<std::mutex> lock(games_mutex);
+            auto it = fd_to_game.find(client_fd);
+            if (it != fd_to_game.end()) {
+                game = it->second;
+                fd_to_game.erase(game->player_x_fd);
+                fd_to_game.erase(game->player_o_fd);
+            }
+        }
+
+        if (game) {
+            int opponent_fd = (client_fd == game->player_x_fd) ? game->player_o_fd : game->player_x_fd;
+            safe_send(opponent_fd, MessageType::GAME_OVER, username + " disconnected. Game over.");
+        }
+    }
     remove_client(client_fd);
     broadcast(MessageType::LEAVE, username, -1);
     close(client_fd);
@@ -257,6 +281,8 @@ int main() {
 
         std::thread(handle_client, client_fd).detach();
     }
+
+
 
     
     close(server_fd);

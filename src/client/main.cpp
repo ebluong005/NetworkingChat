@@ -62,8 +62,7 @@ void receive_loop(int sock_fd){
     std::cout <<"\nServer disconnected\n";
 }
 int main() {
-    //std::cout <<"Client Skeleton alive\n";
-
+    // std::cout <<"Client Skeleton alive\n";
     // Create a socket
 
     int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
